@@ -1,12 +1,13 @@
 package com.alorsfaim.iot.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-public class BalanceMessageConsumer {
+public class BalanceMessageConsumer implements InitializingBean {
 
     private final SerialMessageBroker serialMessageBroker;
     private final ThreadPoolTaskExecutor brokerExecutor;
@@ -16,8 +17,10 @@ public class BalanceMessageConsumer {
         this.brokerExecutor = brokerExecutor;
     }
 
-    public void start() {
-        log.info("Serial Port Message Broker starts ...");
+
+    @Override
+    public void afterPropertiesSet() {
+        log.info("Message Consumer starts ...");
         brokerExecutor.execute(this::processReceivedMessages);
     }
 

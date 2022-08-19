@@ -1,20 +1,23 @@
 package com.alorsfaim.iot.service;
 
+import com.alorsfaim.iot.data.BalanceCommand;
 import com.alorsfaim.iot.data.BalanceMessage;
 import gnu.io.NRSerialPort;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
-import java.io.DataInputStream;
+import java.io.*;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
-public class SerialMessageBroker {
+public class SerialMessageBroker implements InitializingBean, DisposableBean {
 
     @Value("${serial.port:COM1}")
     private String port;
@@ -27,26 +30,35 @@ public class SerialMessageBroker {
 
     private final ThreadPoolTaskExecutor brokerExecutor;
 
+    private NRSerialPort serialPort;
+
     public SerialMessageBroker(ThreadPoolTaskExecutor brokerExecutor) {
         messageQueue = new ArrayBlockingQueue<>(100, true);
         this.brokerExecutor = brokerExecutor;
     }
 
-    public void start() {
+    @Override
+    public void afterPropertiesSet() {
+        log.info("Port {} connected with rate {}", port, rate);
+        this.serialPort = new NRSerialPort(port, rate);
+        this.serialPort.connect();
         log.info("Serial Port Message Broker starts ...");
         brokerExecutor.execute(this::readSerialPortMessages);
     }
 
-    private void readSerialPortMessages() {
-        NRSerialPort serial = new NRSerialPort(port, rate);
-        try {
-            serial.connect();
-            log.info("Port {} connected with rate {}", port, rate);
+    @Override
+    public void destroy() {
+        log.info("Port {} disconnected", port);
+        this.serialPort.disconnect();
+    }
 
+    private void readSerialPortMessages() {
+        try {
             while (true) {
                 // We have here a plain socket or a wrapped TLS socket
-                try (DataInputStream ins = new DataInputStream(serial.getInputStream());
-                     MasterDMessageReader reader = new MasterDMessageReader(ins, frequency)) {
+                try (InputStream ins = serialPort.getInputStream();
+                     DataInputStream dins = new DataInputStream(ins);
+                     MasterDMessageReader reader = new MasterDMessageReader(dins, frequency)) {
                     while (true) {
                         Optional<BalanceMessage> message = reader.readMessage();
 
@@ -63,13 +75,33 @@ public class SerialMessageBroker {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Thread interrupted.", e);
-        } finally {
-            serial.disconnect();
         }
     }
 
+    /**
+     * Get message from blocking queue
+     *
+     * @return message object
+     * @throws InterruptedException
+     */
     public BalanceMessage getMessage() throws InterruptedException {
         return messageQueue.poll(10, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Send command message to Balance
+     *
+     * @param command pre-defined command
+     */
+    public void sendCommandMessage(BalanceCommand command) {
+        try (OutputStream outs = serialPort.getOutputStream();
+             DataOutputStream douts = new DataOutputStream(outs)) {
+            douts.write(command.bytesCommand);
+            douts.flush();
+        } catch (IOException e) {
+            log.error("Error occurred while sending command {} to serial port {}", command, port, e);
+            throw new RuntimeException(e);
+        }
     }
 }
 
