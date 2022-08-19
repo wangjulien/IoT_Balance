@@ -15,7 +15,7 @@ public class SerialPortConnector {
         }
 
         int baudRate = 9600;
-        NRSerialPort serial = new NRSerialPort(port, baudRate);
+        NRSerialPort serial = new NRSerialPort("COM1", baudRate);
         serial.connect();
 
         try (DataInputStream ins = new DataInputStream(serial.getInputStream());
@@ -24,11 +24,11 @@ public class SerialPortConnector {
             //while(ins.available()==0 && !Thread.interrupted());// wait for a byte
             while (!Thread.interrupted()) {// read all bytes
                 if (ins.available() > 0) {
-                    int b = ins.read();
+                    System.out.println("Len: " + ins.available());
+                    var b = ins.readByte();
                     //outs.write((byte)b);
-                    System.out.print(b);
+                    System.out.println(String.format("%02X", b));
                 }
-                Thread.sleep(5);
             }
         } catch (Exception ex) {
             ex.printStackTrace();
