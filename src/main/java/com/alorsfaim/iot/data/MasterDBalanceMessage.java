@@ -1,23 +1,24 @@
 package com.alorsfaim.iot.data;
 
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
-
 import java.math.BigDecimal;
 import java.util.Deque;
+import java.util.Objects;
 import java.util.Optional;
 
-@Slf4j
-@Data
-@EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true)
+
 public class MasterDBalanceMessage extends BalanceMessage {
     private static final int MESSAGE_LENGTH = 8;
     private static final int WEIGHT_LENGTH = 7;
 
-    private byte status;
+    private Status status;
+
+    public Status getStatus() {
+        return status;
+    }
+
+    public void setStatus(Status status) {
+        this.status = status;
+    }
 
     public static Optional<BalanceMessage> of(Deque<Byte> byteStack) {
         try {
@@ -41,16 +42,38 @@ public class MasterDBalanceMessage extends BalanceMessage {
                 // Set Gross Weight
                 msg.setWeight(new BigDecimal(sb.reverse().toString()));
                 // Set Status
-                msg.setStatus(byteStack.pop());
+                msg.setStatus(Status.of(byteStack.pop()));
 
                 return Optional.of(msg);
             }
         } catch (Exception ex) {
-            log.error("Error when reading Master D balance message", ex);
+            throw new RuntimeException("Error when reading Master D balance message", ex);
         } finally {
             byteStack.clear();
         }
 
         return Optional.empty();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof MasterDBalanceMessage)) return false;
+        if (!super.equals(o)) return false;
+        MasterDBalanceMessage that = (MasterDBalanceMessage) o;
+        return status == that.status;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), status);
+    }
+
+    @Override
+    public String toString() {
+        return "MasterDBalanceMessage{" +
+                "status=" + status +
+                "weight=" + weight +
+                '}';
     }
 }

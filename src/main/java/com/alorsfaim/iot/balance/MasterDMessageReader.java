@@ -1,4 +1,4 @@
-package com.alorsfaim.iot.service;
+package com.alorsfaim.iot.balance;
 
 import com.alorsfaim.iot.data.BalanceMessage;
 import com.alorsfaim.iot.data.MasterDBalanceMessage;

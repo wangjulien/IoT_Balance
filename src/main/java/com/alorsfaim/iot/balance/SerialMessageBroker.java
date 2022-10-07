@@ -1,55 +1,56 @@
-package com.alorsfaim.iot.service;
+package com.alorsfaim.iot.balance;
 
 import com.alorsfaim.iot.data.BalanceCommand;
 import com.alorsfaim.iot.data.BalanceMessage;
 import gnu.io.NRSerialPort;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-@Slf4j
-@Service
-public class SerialMessageBroker implements InitializingBean, DisposableBean {
+public class SerialMessageBroker extends Thread implements MessageBroker {
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
-    @Value("${serial.port:COM1}")
-    private String port;
-    @Value("${serial.rate:9600}")
-    private int rate;
-    @Value("${serial.frequency:1000}")
-    private int frequency;
+    private String port = "COM1";
+    private int rate = 9600;
+    private int frequency = 1000;
 
     private final ArrayBlockingQueue<BalanceMessage> messageQueue;
 
-    private final ThreadPoolTaskExecutor brokerExecutor;
-
     private NRSerialPort serialPort;
 
-    public SerialMessageBroker(ThreadPoolTaskExecutor brokerExecutor) {
+    public SerialMessageBroker() {
         messageQueue = new ArrayBlockingQueue<>(100, true);
-        this.brokerExecutor = brokerExecutor;
     }
 
     @Override
-    public void afterPropertiesSet() {
+    public void setPort(String port) {
+        this.port = port;
+    }
+
+    @Override
+    public void setRate(int rate) {
+        this.rate = rate;
+    }
+
+    @Override
+    public void setFrequency(int frequency) {
+        this.frequency = frequency;
+    }
+
+    /**
+     * Thread begins
+     */
+    @Override
+    public void run() {
         log.info("Port {} connected with rate {}", port, rate);
         this.serialPort = new NRSerialPort(port, rate);
         this.serialPort.connect();
         log.info("Serial Port Message Broker starts ...");
-        brokerExecutor.execute(this::readSerialPortMessages);
-    }
-
-    @Override
-    public void destroy() {
-        log.info("Port {} disconnected", port);
-        this.serialPort.disconnect();
+        readSerialPortMessages();
     }
 
     private void readSerialPortMessages() {
@@ -74,7 +75,10 @@ public class SerialMessageBroker implements InitializingBean, DisposableBean {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("Thread interrupted.", e);
+            throw new RuntimeException("Thread interrupted.", e);
+        } finally {
+            log.info("Port {} disconnected", port);
+            this.serialPort.disconnect();
         }
     }
 
@@ -82,8 +86,8 @@ public class SerialMessageBroker implements InitializingBean, DisposableBean {
      * Get message from blocking queue
      *
      * @return message object
-     * @throws InterruptedException
      */
+    @Override
     public BalanceMessage getMessage() throws InterruptedException {
         return messageQueue.poll(10, TimeUnit.SECONDS);
     }
@@ -93,6 +97,7 @@ public class SerialMessageBroker implements InitializingBean, DisposableBean {
      *
      * @param command pre-defined command
      */
+    @Override
     public void sendCommandMessage(BalanceCommand command) {
         try (OutputStream outs = serialPort.getOutputStream();
              DataOutputStream douts = new DataOutputStream(outs)) {
